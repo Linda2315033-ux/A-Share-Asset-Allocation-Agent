@@ -1,0 +1,65 @@
+name: A-share daily research manual pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: stock-research-pilot
+  cancel-in-progress: false
+
+jobs:
+  research-pilot:
+    runs-on: ubuntu-latest
+    timeout-minutes: 240
+    steps:
+      - name: Checkout public source
+        uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+      - name: Install dependencies
+        run: python -m pip install -r requirements.txt
+      - name: Restore private market data
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_DATA_READ_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Missing PRIVATE_DATA_READ_TOKEN'; exit 1; }
+          python stock_agent_github_storage_v1.py restore
+      - name: Update market data and generate research preview
+        run: python stock_agent_daily_automation_v3.py --daily-update --confirm-daily-update --timeout 9000
+      - name: Verify latest automation result before any backup
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          reports = list(Path('output/stock_agent_daily_automation_v3').glob('*/run_summary.json'))
+          if len(reports) != 1:
+              raise SystemExit(f'Expected one fresh run summary, found {len(reports)}')
+          report = json.loads(reports[0].read_text(encoding='utf-8'))
+          if report.get('status') != 'RESEARCH_PREVIEW_CREATED_PUBLICATION_BLOCKED':
+              raise SystemExit(f'Not a newly completed research preview: {report.get("status")}')
+          if report.get('formal_publication_allowed') is not False:
+              raise SystemExit('Formal publication status invalid')
+          date = report.get('expected_trade_date')
+          if not date:
+              raise SystemExit('Missing expected trade date')
+          from stock_agent_glm_daily_v2 import latest_validated_preview
+          directory, manifest, latest = latest_validated_preview(date)
+          if manifest.get('asof_date') != date:
+              raise SystemExit('Preview date mismatch')
+          Path('verified_trade_date.txt').write_text(date, encoding='utf-8')
+          print('NEW_RESEARCH_PREVIEW_VALIDATED:', date, directory)
+          PY
+      - name: Upload NEW immutable private backup
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_DATA_WRITE_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Missing PRIVATE_DATA_WRITE_TOKEN'; exit 1; }
+          python stock_agent_github_backup_v1.py --date "$(cat verified_trade_date.txt)" --confirm
+      - name: Pilot completed
+        run: echo 'PILOT_COMPLETED_PRIVATE_BACKUP_OK; public publication intentionally disabled'
