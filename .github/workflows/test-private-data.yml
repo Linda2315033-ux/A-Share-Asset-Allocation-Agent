@@ -1,0 +1,49 @@
+name: Verify private market-data backup
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Download private release asset and verify SHA-256
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_DATA_READ_TOKEN }}
+          REPO: Linda2315033-ux/a-share-agent-private-data
+          EXPECTED_SHA256: 04584cdf8bb89cbd478305fea2784e8d59a788752744a50b20c1c70bbbb59117
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [[ -z "${GH_TOKEN:-}" ]]; then
+            echo 'Missing PRIVATE_DATA_READ_TOKEN repository secret' >&2
+            exit 1
+          fi
+          mkdir -p "$RUNNER_TEMP/market-data"
+          gh release download data-bootstrap-v1 \
+            --repo "$REPO" \
+            --pattern 'stock_history_backup.tar.gz' \
+            --dir "$RUNNER_TEMP/market-data"
+          cd "$RUNNER_TEMP/market-data"
+          echo "$EXPECTED_SHA256  stock_history_backup.tar.gz" | sha256sum -c -
+          python - <<'PY'
+          import tarfile
+          from pathlib import Path
+          p = Path('stock_history_backup.tar.gz')
+          raw, qfq, unsafe = set(), set(), []
+          with tarfile.open(p, 'r:gz') as tar:
+              for item in tar:
+                  parts = Path(item.name).parts
+                  if item.issym() or item.islnk() or not item.isfile() and not item.isdir():
+                      unsafe.append(item.name)
+                  if item.isfile() and len(parts) == 3 and parts[0] == 'mainboard_history_v1' and parts[2].endswith('.csv'):
+                      if parts[1] == 'raw': raw.add(parts[2])
+                      if parts[1] == 'qfq': qfq.add(parts[2])
+          assert not unsafe, f'Unsafe members: {unsafe[:3]}'
+          assert len(raw) == len(qfq) == len(raw & qfq) == 3189, (len(raw), len(qfq), len(raw & qfq))
+          print('PRIVATE_DATA_RESTORE_CHECK_OK: 3189 raw/qfq pairs; SHA-256 verified')
+          PY
