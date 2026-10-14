@@ -1,0 +1,41 @@
+# Secrets / credentials
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+**/secrets.toml
+*api_key*.txt
+
+# Python / virtual environments
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.envrc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Raw / proprietary market data and research outputs
+data/stocks/
+output/
+*.log
+*.part
+*.tmp
+*.bak
+
+# Large historical datasets and local experiment results at project root
+/*.csv
+/*.json
+/*.zip
+/*.xlsx
+/*.parquet
+/*.png
+/*.jpg
+/*.jpeg
+
+# OS / IDE
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
