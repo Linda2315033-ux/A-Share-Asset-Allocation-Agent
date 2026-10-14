@@ -1,0 +1,33 @@
+name: Restore and validate private A-share data
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  restore-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Check out public agent source
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Restore private market data and validate
+        env:
+          GH_TOKEN: ${{ secrets.PRIVATE_DATA_READ_TOKEN }}
+        run: |
+          test -n "$GH_TOKEN" || { echo 'Missing PRIVATE_DATA_READ_TOKEN secret'; exit 1; }
+          python stock_agent_github_storage_v1.py restore
+      - name: Check restored paths
+        run: |
+          test -f data/stocks/universe.csv
+          test -f data/stocks/universe_metadata.json
+          test -f data/stocks/market/sh000300.csv
+          test "$(find data/stocks/mainboard_history_v1/raw -name '*.csv' | wc -l)" -eq 3189
+          test "$(find data/stocks/mainboard_history_v1/qfq -name '*.csv' | wc -l)" -eq 3189
+          echo 'CLOUD_RESTORE_TEST_SUCCESS'
