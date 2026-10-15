@@ -1,10 +1,10 @@
-name: A-share daily research V2 (manual validation)
+name: A-share daily research V2 (scheduled pilot)
 
 on:
   workflow_dispatch:
-  # Enable ONLY after successful end-to-end manual validation:
-  # schedule:
-  #   - cron: '30 9 * * 1-5' # 17:30 Asia/Shanghai
+  # Scheduled pilot; end-to-end production validation is pending.
+  schedule:
+    - cron: '30 9 * * 1-5' # 17:30 Asia/Shanghai
 
 permissions:
   contents: write
